@@ -1,23 +1,61 @@
 from flask import Flask, request, jsonify
-from vision_search import load_dataset_features, find_similar_images, feature_extractor
+import os
+import uuid
+from werkzeug.utils import secure_filename
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+import csv
+
+from vision_search import load_dataset_features, find_similar_images
+from feature_extraction import extract_features, feature_extractor
+import tensorflow as tf
 
 app = Flask(__name__)
 
+# Load the feature extractor model
+model = tf.keras.models.load_model('./car_brand_classifier_final.keras')
+feature_extractor = tf.keras.Model(inputs=model.input, outputs=model.layers[-3].output)
+
 # Load precomputed dataset features
-dataset_features = load_dataset_features()
+dataset_features = load_dataset_features('dataset_features.csv')
 
-@app.route('/similar-images', methods=['POST'])
-def get_similar_images():
-    data = request.json
-    query_image_path = data.get('query_image_path')
-    top_n = data.get('top_n', 5)
+@app.route('/vision-search', methods=['POST'])
+def vision_search():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image provided'}), 400
 
-    if not query_image_path:
-        return jsonify({'error': 'No query image path provided'}), 400
+    query_image = request.files['image']
+    if query_image.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
 
-    similar_images = find_similar_images(query_image_path, dataset_features, feature_extractor, top_n)
+    # Save the uploaded image temporarily
+    temp_dir = '/tmp'
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
 
-    return jsonify(similar_images)
+    temp_image_path = os.path.join(temp_dir, f"{uuid.uuid4()}_{secure_filename(query_image.filename)}")
+    query_image.save(temp_image_path)
 
-if __name__ == "__main__":
+    try:
+        # Extract features from the query image
+        query_features = extract_features(temp_image_path, feature_extractor)
+
+        # Find similar images
+        similar_images = find_similar_images(temp_image_path, dataset_features, feature_extractor, top_n=5)
+
+        # Prepare the response
+        result = [
+            {'url': img_path, 'similarity': score}
+            for img_path, score in similar_images
+        ]
+
+        return jsonify({'similarImages': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        # Clean up the temporary image file
+        if os.path.exists(temp_image_path):
+            os.remove(temp_image_path)
+
+if __name__ == '__main__':
     app.run(debug=True)
