@@ -4,3 +4,4 @@ scikit-learn
 opencv-python
 Pillow
 tensorflow==2.8.0
+flask_caching
