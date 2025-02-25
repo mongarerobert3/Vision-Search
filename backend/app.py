@@ -5,6 +5,7 @@ from werkzeug.utils import secure_filename
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import csv
+from flask_caching import Cache
 
 from vision_search import load_dataset_features, find_similar_images
 from feature_extraction import extract_features, feature_extractor
@@ -12,14 +13,21 @@ import tensorflow as tf
 
 app = Flask(__name__)
 
+# Define the paths to the model and dataset features
+model_path = '/app/google_drive/car_brand_classifier_final.keras'
+dataset_features_path = '/app/google_drive/dataset_features.csv'
+
 # Load the feature extractor model
-model = tf.keras.models.load_model('./car_brand_classifier_final.keras')
+model = tf.keras.models.load_model(model_path)
 feature_extractor = tf.keras.Model(inputs=model.input, outputs=model.layers[-3].output)
 
 # Load precomputed dataset features
-dataset_features = load_dataset_features('dataset_features.csv')
+dataset_features = load_dataset_features(model_path)
+
+cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 
 @app.route('/vision-search', methods=['POST'])
+@cache.cached(timeout=60, key_prefix='vision_search_')
 def vision_search():
     if 'image' not in request.files:
         return jsonify({'error': 'No image provided'}), 400

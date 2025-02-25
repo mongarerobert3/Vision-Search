@@ -5,7 +5,9 @@ import ast
 
 from feature_extraction import extract_features, feature_extractor
 
-def load_dataset_features(feature_csv='dataset_features.csv'):
+dataset_features_path = '/app/google_drive/dataset_features.csv'
+
+def load_dataset_features(feature_csv=dataset_features_path):
     """
     Load precomputed features from the CSV file.
     :param feature_csv: Path to the CSV file containing dataset features.
