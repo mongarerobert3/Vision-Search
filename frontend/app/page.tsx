@@ -4,11 +4,18 @@ import React, { useState } from 'react';
 import axios from 'axios';
 
 const VisionSearch = () => {
-    const [queryImage, setQueryImage] = useState(null);
-    const [similarImages, setSimilarImages] = useState([]);
+    const [queryImage, setQueryImage] = useState<File | null>(null);
+    interface SimilarImage {
+        url: string;
+        name: string;
+    }
+    
+    const [similarImages, setSimilarImages] = useState<SimilarImage[]>([]);
 
-    const handleImageUpload = (e) => {
-        setQueryImage(e.target.files[0]);
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setQueryImage(e.target.files[0]);
+        }
     };
 
     const handleSubmit = async () => {
