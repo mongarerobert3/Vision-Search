@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from 'react';
 import axios from 'axios';
 
@@ -18,7 +20,7 @@ const VisionSearch = () => {
 
         try {
             const response = await axios.post(
-                'https://your-backend-url/vision-search',
+                'https://vision-search.onrender.com/vision-search',
                 formData,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
