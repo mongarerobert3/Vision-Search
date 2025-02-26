@@ -27,7 +27,7 @@ const VisionSearch = () => {
 
         try {
             const response = await axios.post(
-                'https://vision-search.onrender.com/vision-search',
+                '2db8-34-13-224-106.ngrok-free.app/vision-search',
                 formData,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
