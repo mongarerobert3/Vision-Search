@@ -26,7 +26,7 @@ const VisionSearch = () => {
         formData.append('image', queryImage);
 
         try {
-            const response = await axios.post('https://2db8-34-13-224-106.ngrok-free.app/',
+            const response = await axios.post('https://2db8-34-13-224-106.ngrok-free.app/vision-search',
                 formData,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
