@@ -46,19 +46,17 @@ const VisionSearch = () => {
             <input type="file" onChange={handleImageUpload} />
             <button onClick={handleSubmit}>Search</button>
 
-            {similarImages.length > 0 && (
-                <div>
-                    <h2>Top Similar Images:</h2>
-                    <ul>
-                        {similarImages.map((img, index) => (
-                            <li key={index}>
-                                <img src={img.url} alt={`Similar ${index + 1}`} width="200" />
-                                <p>{img.name}</p>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
+            {similarImages.map((img, index) => (
+                <li key={index}>
+                    {/* Prepend the backend URL to the image path */}
+                    <img
+                        src={`https://3d55-35-240-223-21.ngrok-free.app${img.url}`}
+                        alt={`Similar ${index + 1}`}
+                        width="200"
+                    />
+                    <p>{img.name}</p>
+                </li>
+            ))}
         </div>
     );
 };
