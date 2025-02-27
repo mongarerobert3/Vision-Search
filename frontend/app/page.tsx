@@ -21,7 +21,6 @@ const VisionSearch = () => {
     const handleSubmit = async () => {
         if (!queryImage) return;
 
-
         // Send the query image to the backend
         const formData = new FormData();
         formData.append('image', queryImage);
