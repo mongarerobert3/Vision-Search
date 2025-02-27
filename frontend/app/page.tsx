@@ -20,19 +20,19 @@ const VisionSearch = () => {
 
     const handleSubmit = async () => {
         if (!queryImage) return;
-
-        // Send the query image to the backend
+    
+        // Send the query image to the Render API
         const formData = new FormData();
         formData.append('image', queryImage);
-
+    
         try {
-            const response = await axios.post('https://33c5-35-240-223-21.ngrok-free.app/vision-search',
+            const response = await axios.post('https://your-render-app.onrender.com/vision-search',
                 formData,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
                 }
             );
-
+    
             // Update the state with similar images
             setSimilarImages(response.data.similarImages);
         } catch (error) {

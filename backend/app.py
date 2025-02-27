@@ -1,107 +1,75 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
 import os
 import uuid
 from werkzeug.utils import secure_filename
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
-import csv
 import tensorflow as tf
 from huggingface_hub import hf_hub_download
+from tensorflow.keras.preprocessing import image
+import numpy as np
+import pinecone
+from decouple import config
 
 app = Flask(__name__)
+CORS(app)
 
-# Define constants
-MODEL_REPO_ID = "courte/Car_Vision"  # Replace with your Hugging Face repo ID
+# Pinecone API key and environment
+PINECONE_API_KEY =config("PINECONE_API_KEY") 
+PINECONE_ENVIRONMENT =config("YOUR_PINECONE_ENVIRONMENT") 
+PINECONE_INDEX_NAME = "car-images"  
+
+# Define paths
+DATASET_PATH = "./Car_Sales_vision_ai_project"
+MODEL_REPO_ID = "courte/Car_Vision" 
 MODEL_FILENAME = "car_brand_classifier_final.h5"
-FEATURES_CSV = "dataset_features.csv"
 
-# Load the feature extractor model from Hugging Face
-def load_model_from_huggingface(repo_id, filename):
-    """
-    Download and load the model from Hugging Face.
-    :param repo_id: Repository ID on Hugging Face.
-    :param filename: Model file name.
-    :return: Loaded TensorFlow model.
-    """
-    print("Downloading model from Hugging Face...")
-    model_path = hf_hub_download(repo_id=repo_id, filename=filename)
-    return tf.keras.models.load_model(model_path)
+# Load the model and feature extractor from Hugging Face
+model_name = "courte/Car_Vision"
+model_filename = "car_brand_classifier_final_savedmodel/car_brand_classifier_final.h5"
 
-# Load precomputed dataset features
-def load_dataset_features(features_csv):
-    """
-    Load precomputed features from a CSV file.
-    :param features_csv: Path to the CSV file containing dataset features.
-    :return: A dictionary mapping image paths to their feature vectors.
-    """
-    dataset_features = {}
-    try:
-        with open(features_csv, 'r') as csvfile:
-            reader = csv.reader(csvfile)
-            next(reader)  # Skip header row
-            for row in reader:
-                if len(row) != 2:  # Ensure the row has exactly two columns
-                    print(f"Skipping invalid row: {row}")
-                    continue
+# Load the model directly from Hugging Face
+model_path = hf_hub_download(repo_id=model_name, filename=model_filename)
+model = tf.keras.models.load_model(model_path)
+feature_extractor = tf.keras.Model(inputs=model.input, outputs=model.layers[-3].output)
 
-                img_path, features_str = row
-                # Clean the features string (remove brackets and whitespace)
-                features_cleaned = features_str.replace('[', '').replace(']', '').replace(' ', '')
+# Initialize Pinecone client
+pc = Pinecone(api_key=PINECONE_API_KEY)
 
-                # Convert cleaned features to a NumPy array
-                try:
-                    features = np.array(features_cleaned.split(','), dtype=np.float32)
-                    dataset_features[img_path] = features
-                except ValueError as e:
-                    print(f"Error processing features for {img_path}: {e}")
-    except FileNotFoundError:
-        print(f"Error: File '{features_csv}' not found.")
-    except Exception as e:
-        print(f"Error loading dataset features: {e}")
+if PINECONE_INDEX_NAME not in pc.list_indexes().names():
+    pc.create_index(
+        name=PINECONE_INDEX_NAME,
+        dimension=256,  # Ensure this matches your model's embedding size
+        metric="cosine",  # Similarity search metric
+        spec=ServerlessSpec(cloud="aws", region="us-east-1")  # Modify region if needed
+    )
 
+# Get index
+index = pinecone.Index(PINECONE_INDEX_NAME)
 
-# Extract features from an image
 def extract_features(image_path, feature_extractor):
-    """
-    Extract features from an image using the feature extractor.
-    :param image_path: Path to the image file.
-    :param feature_extractor: The feature extraction model.
-    :return: A feature vector for the image.
-    """
-    img = tf.keras.preprocessing.image.load_img(image_path, target_size=(299, 299))
-    img_array = tf.keras.preprocessing.image.img_to_array(img)
-    img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
-    img_array = img_array / 255.0  # Normalize pixel values
+    img = image.load_img(image_path, target_size=(299, 299))
+    img_array = image.img_to_array(img)
+    img_array = np.expand_dims(img_array, axis=0)
+    img_array = img_array / 255.0
     features = feature_extractor.predict(img_array)
     return features.flatten()
 
-# Find similar images
-def find_similar_images(query_features, dataset_features, top_n=5):
-    """
-    Find the most similar images based on cosine similarity.
-    :param query_features: Feature vector of the query image.
-    :param dataset_features: Dictionary of precomputed dataset features.
-    :param top_n: Number of similar images to return.
-    :return: List of tuples (image_path, similarity_score).
-    """
-    similarities = []
-    for img_path, features in dataset_features.items():
-        score = cosine_similarity([query_features], [features])[0][0]
-        similarities.append((img_path, score))
-    similarities.sort(key=lambda x: x[1], reverse=True)
-    return similarities[:top_n]
+def find_similar_images(query_features, top_n=5):
+    # Query Pinecone for similar images
+    results = index.query(
+        vector=query_features,
+        top_k=top_n,
+        include_metadata=False  # No need for metadata in this case
+    )
+    return [(match['id'], match['score']) for match in results['matches']]
 
-# Initialize the model and dataset features
-model = load_model_from_huggingface(MODEL_REPO_ID, MODEL_FILENAME)
-feature_extractor = tf.keras.Model(inputs=model.input, outputs=model.layers[-3].output)
-dataset_features = load_dataset_features(FEATURES_CSV)
+@app.route('/images/<path:filename>')
+def serve_image(filename):
+    image_path = os.path.join(DATASET_PATH, filename)
+    return send_from_directory(os.path.dirname(image_path), os.path.basename(image_path))
 
 @app.route('/vision-search', methods=['POST'])
 def vision_search():
-    """
-    Endpoint for vision search.
-    Receives an image, extracts its features, and returns similar images.
-    """
     if 'image' not in request.files:
         return jsonify({'error': 'No image provided'}), 400
 
@@ -109,7 +77,6 @@ def vision_search():
     if query_image.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
-    # Save the uploaded image temporarily
     temp_dir = '/tmp'
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
@@ -118,28 +85,28 @@ def vision_search():
     query_image.save(temp_image_path)
 
     try:
-        # Extract features from the query image
-        query_features = extract_features(temp_image_path, feature_extractor)
+        query_features = extract_features(temp_image_path, feature_extractor).tolist()
 
-        # Find similar images
-        similar_images = find_similar_images(query_features, dataset_features, top_n=5)
+        # Find similar images using Pinecone
+        similar_images = find_similar_images(query_features, top_n=5)
 
-        # Prepare the response
         result = [
-            {'url': img_path, 'similarity': score}
+            {
+                'url': f"/images/{os.path.relpath(img_path, DATASET_PATH)}",
+                'name': os.path.basename(img_path)
+            }
             for img_path, score in similar_images
         ]
+
         return jsonify({'similarImages': result})
 
     except Exception as e:
+        print(f"Error during vision search: {e}")
         return jsonify({'error': str(e)}), 500
 
     finally:
-        # Clean up the temporary image file
         if os.path.exists(temp_image_path):
             os.remove(temp_image_path)
 
-
-
 if __name__ == '__main__':
-      app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0')
