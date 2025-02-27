@@ -21,13 +21,13 @@ const VisionSearch = () => {
     const handleSubmit = async () => {
         if (!queryImage) return;
 
-        
+
         // Send the query image to the backend
         const formData = new FormData();
         formData.append('image', queryImage);
 
         try {
-            const response = await axios.post('https://107a-35-240-223-21.ngrok-free.app/vision-search',
+            const response = await axios.post('https://869c-35-240-223-21.ngrok-free.app/vision-search',
                 formData,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
