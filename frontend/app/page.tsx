@@ -50,7 +50,7 @@ const VisionSearch = () => {
                 <li key={index}>
                     {/* Prepend the backend URL to the image path */}
                     <img
-                        src={`https://3d55-35-240-223-21.ngrok-free.app${img.url}`}
+                        src={`https://541e-35-240-223-21.ngrok-free.app/${img.url}`}
                         alt={`Similar ${index + 1}`}
                         width="200"
                     />
