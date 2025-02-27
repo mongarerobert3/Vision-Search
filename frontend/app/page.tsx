@@ -26,7 +26,7 @@ const VisionSearch = () => {
         formData.append('image', queryImage);
 
         try {
-            const response = await axios.post('https://541e-35-240-223-21.ngrok-free.app/vision-search',
+            const response = await axios.post('https://33c5-35-240-223-21.ngrok-free.app/vision-search',
                 formData,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
@@ -50,7 +50,7 @@ const VisionSearch = () => {
                 <li key={index}>
                     {/* Prepend the backend URL to the image path */}
                     <img
-                        src={`https://541e-35-240-223-21.ngrok-free.app${img.url}`}
+                        src={`https://33c5-35-240-223-21.ngrok-free.app${img.url}`}
                         alt={`Similar ${index + 1}`}
                         width="200"
                     />
