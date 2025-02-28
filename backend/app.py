@@ -47,7 +47,7 @@ if PINECONE_INDEX_NAME not in pc.list_indexes().names():
     )
 
 # Get index
-index = pinecone.Index(PINECONE_INDEX_NAME)
+index = pc.Index(PINECONE_INDEX_NAME)
 
 def extract_features(image_path):
     with open(image_path, "rb") as image_file:
@@ -57,7 +57,7 @@ def extract_features(image_path):
     response = requests.post(HF_API_URL, json={"image": image_data}, headers=headers)
 
     if response.status_code == 200:
-        return np.array(response.json())  # Expecting an array from the API
+        return np.array(response.json())  
     else:
         raise ValueError(f"HF API Error: {response.text}")
 
