@@ -12,6 +12,9 @@ import requests
 from pinecone import Pinecone, ServerlessSpec
 from decouple import config
 
+import tempfile
+from PIL import Image
+
 app = Flask(__name__)
 CORS(app, origins=["https://vision-search-five.vercel.app"])
 
@@ -22,6 +25,10 @@ PINECONE_INDEX_NAME = "car-images"
 
 HF_API_URL = "https://api-inference.huggingface.co/models/courte/Car_Vision"
 HF_API_TOKEN = config("HF_API_TOKEN")
+
+
+# Space API endpoint
+SPACE_API_URL = "https://courte-car-vision.hf.space/api/predict"
 
 # Define paths
 DATASET_PATH = "./Car_Sales_vision_ai_project"
@@ -51,18 +58,6 @@ if PINECONE_INDEX_NAME not in pc.list_indexes().names():
 # Get index
 index = pc.Index(PINECONE_INDEX_NAME)
 
-def extract_features(image_path):
-    with open(image_path, "rb") as image_file:
-        image_data = base64.b64encode(image_file.read()).decode("utf-8")
-
-    headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
-    response = requests.post(HF_API_URL, json={"image": image_data}, headers=headers)
-
-    if response.status_code == 200:
-        return np.array(response.json())  
-    else:
-        raise ValueError(f"HF API Error: {response.text}")
-
 def find_similar_images(query_features, top_n=5):
     # Query Pinecone for similar images
     results = index.query(
@@ -86,28 +81,32 @@ def vision_search():
     if query_image.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
-    temp_dir = '/tmp'
-    if not os.path.exists(temp_dir):
-        os.makedirs(temp_dir)
-
-    temp_image_path = os.path.join(temp_dir, f"{uuid.uuid4()}_{secure_filename(query_image.filename)}")
-    query_image.save(temp_image_path)
+    try:
+        # Validate the image using Pillow
+        img = Image.open(query_image)
+        img.verify()  # Verify that it is an image
+    except Exception:
+        return jsonify({'error': 'Invalid file type'}), 400
 
     try:
-        query_features = extract_features(temp_image_path).tolist()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+            query_image.save(temp_file.name)
+            temp_image_path = temp_file.name
 
-        # Find similar images using Pinecone
-        similar_images = find_similar_images(query_features, top_n=5)
+        # Forward the image to the Space API
+        response = requests.post(SPACE_API_URL, files={"file": open(temp_image_path, "rb")})
+        if response.status_code == 200:
+            features = np.array(response.json())
+        else:
+            raise ValueError(f"Space API Error: {response.text}")
 
-        result = [
-            {
-                'url': f"/images/{os.path.relpath(img_path, DATASET_PATH)}",
-                'name': os.path.basename(img_path)
-            }
-            for img_path, score in similar_images
-        ]
-
-        return jsonify({'similarImages': result})
+        # Query Pinecone for similar images
+        results = index.query(
+            vector=features,
+            top_k=5,
+            include_metadata=True
+        )
+        return jsonify(results)
 
     except Exception as e:
         print(f"Error during vision search: {e}")
