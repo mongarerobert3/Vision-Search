@@ -7,15 +7,18 @@ import tensorflow as tf
 from huggingface_hub import hf_hub_download
 from tensorflow.keras.preprocessing import image
 import numpy as np
+import base64
+import requests
 from pinecone import Pinecone, ServerlessSpec
 from decouple import config
+from roboflow import Roboflow
 
 app = Flask(__name__)
 CORS(app, origins=["https://vision-search-five.vercel.app"])
 
 # Pinecone API key and environment
-PINECONE_API_KEY =config("PINECONE_API_KEY") 
-PINECONE_ENVIRONMENT =config("PINECONE_ENVIRONMENT") 
+PINECONE_API_KEY = config("PINECONE_API_KEY") 
+PINECONE_ENVIRONMENT = config("PINECONE_ENVIRONMENT") 
 PINECONE_INDEX_NAME = "car-images"  
 
 HF_API_URL = "https://api-inference.huggingface.co/models/courte/Car_Vision"
@@ -33,7 +36,7 @@ model_filename = "car_brand_classifier_final_savedmodel/car_brand_classifier_fin
 # Load the model directly from Hugging Face
 model_path = hf_hub_download(repo_id=model_name, filename=model_filename)
 model = tf.keras.models.load_model(model_path)
-#feature_extractor = tf.keras.Model(inputs=model.input, outputs=model.layers[-3].output)
+feature_extractor = tf.keras.Model(inputs=model.input, outputs=model.layers[-3].output)
 
 # Initialize Pinecone client
 pc = Pinecone(api_key=PINECONE_API_KEY)
@@ -48,6 +51,10 @@ if PINECONE_INDEX_NAME not in pc.list_indexes().names():
 
 # Get index
 index = pc.Index(PINECONE_INDEX_NAME)
+
+# Initialize Roboflow API client
+rf = Roboflow(api_key="YOUR_ROBOFLOW_API_KEY")
+roboflow_model = rf.workspace("starter-ccy4i").project("car-brand-detection").version(1).model
 
 def extract_features(image_path):
     with open(image_path, "rb") as image_file:
@@ -69,6 +76,15 @@ def find_similar_images(query_features, top_n=5):
         include_metadata=False  # No need for metadata in this case
     )
     return [(match['id'], match['score']) for match in results['matches']]
+
+def run_roboflow_inference(image_path):
+    # Run inference on the image using Roboflow
+    img = image.load_img(image_path, target_size=(224, 224))  # Adjust if necessary
+    img_array = image.img_to_array(img) / 255.0  # Normalize the image
+    img_array = np.expand_dims(img_array, axis=0)
+
+    predictions = roboflow_model.predict(img_array).json()
+    return predictions
 
 @app.route('/images/<path:filename>')
 def serve_image(filename):
@@ -92,20 +108,35 @@ def vision_search():
     query_image.save(temp_image_path)
 
     try:
-        query_features = extract_features(temp_image_path).tolist()
+        # Run inference using both models
+        hf_features = extract_features(temp_image_path, feature_extractor).tolist()
+        roboflow_predictions = run_roboflow_inference(temp_image_path)
 
-        # Find similar images using Pinecone
-        similar_images = find_similar_images(query_features, top_n=5)
+        # Compare predictions (choose the one with the highest confidence or other logic)
+        hf_prediction_score = max(hf_features)  # This depends on how your HF model returns predictions
+        roboflow_prediction_score = max([pred['confidence'] for pred in roboflow_predictions['predictions']])
 
-        result = [
-            {
-                'url': f"/images/{os.path.relpath(img_path, DATASET_PATH)}",
-                'name': os.path.basename(img_path)
+        # If Roboflow's prediction is more confident, use it, otherwise fallback to Hugging Face model
+        if roboflow_prediction_score > hf_prediction_score:
+            result = {
+                'model': 'Roboflow',
+                'predictions': roboflow_predictions['predictions']
             }
-            for img_path, score in similar_images
-        ]
+        else:
+            # Find similar images from Pinecone using Hugging Face features
+            similar_images = find_similar_images(hf_features, top_n=5)
+            result = {
+                'model': 'HuggingFace',
+                'similarImages': [
+                    {
+                        'url': f"/images/{os.path.relpath(img_path, DATASET_PATH)}",
+                        'name': os.path.basename(img_path)
+                    }
+                    for img_path, score in similar_images
+                ]
+            }
 
-        return jsonify({'similarImages': result})
+        return jsonify(result)
 
     except Exception as e:
         print(f"Error during vision search: {e}")
