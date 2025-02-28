@@ -6,3 +6,4 @@ huggingface_hub
 numpy
 pinecone-client
 python-decouple
+gunicorn
