@@ -7,6 +7,8 @@ import tensorflow as tf
 from huggingface_hub import hf_hub_download
 from tensorflow.keras.preprocessing import image
 import numpy as np
+import base64
+import requests
 from pinecone import Pinecone, ServerlessSpec
 from decouple import config
 
