@@ -11,7 +11,7 @@ from pinecone import Pinecone, ServerlessSpec
 from decouple import config
 
 app = Flask(__name__)
-CORS(app, origins=["https://vision-search-five.vercel.app/"])
+CORS(app, origins=["https://vision-search-five.vercel.app"])
 
 # Pinecone API key and environment
 PINECONE_API_KEY =config("PINECONE_API_KEY") 
