@@ -23,7 +23,7 @@ PINECONE_ENVIRONMENT = config("PINECONE_ENVIRONMENT")
 PINECONE_INDEX_NAME = "car-images"
 HF_API_URL = "https://api-inference.huggingface.co/models/courte/Car_Vision"
 HF_API_TOKEN = config("HF_API_TOKEN")
-SPACE_API_URL = "https://courte-car-vision.hf.space/api/predict"
+SPACE_API_URL = "https://courte-car-vision.hf.space/run/predict"
 
 # Hugging Face model details
 MODEL_REPO_ID = "courte/Car_Vision"
@@ -95,13 +95,16 @@ def vision_search():
         image_base64 = image_to_base64(preprocessed_image_pil)
 
         # Send the preprocessed image to the Spaces API
-        response = requests.post(SPACE_API_URL, json={"image": image_base64})
+        response = requests.post(
+            "https://courte-car-vision.hf.space/run/predict",  # Correct endpoint
+            json={"data": [f"data:image/jpeg;base64,{image_base64}"]}  # Correct payload format
+        )
 
         if response.status_code != 200:
-            raise ValueError(f"Space API Error: {response.text}")
+            raise ValueError(f"Space API Error: {response.status_code}, {response.text}")
 
         # Extract features from the API response
-        features = np.array(response.json())  # Ensure this matches the expected format
+        features = np.array(response.json()["data"][0])  # Adjust based on the API response format
 
         # Query Pinecone for similar images
         results = find_similar_images(features, top_n=5)
