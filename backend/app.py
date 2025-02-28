@@ -18,6 +18,9 @@ PINECONE_API_KEY =config("PINECONE_API_KEY")
 PINECONE_ENVIRONMENT =config("PINECONE_ENVIRONMENT") 
 PINECONE_INDEX_NAME = "car-images"  
 
+HF_API_URL = "https://api-inference.huggingface.co/models/courte/Car_Vision"
+HF_API_TOKEN = config("HF_API_TOKEN")
+
 # Define paths
 DATASET_PATH = "./Car_Sales_vision_ai_project"
 MODEL_REPO_ID = "courte/Car_Vision" 
@@ -46,13 +49,17 @@ if PINECONE_INDEX_NAME not in pc.list_indexes().names():
 # Get index
 index = pinecone.Index(PINECONE_INDEX_NAME)
 
-def extract_features(image_path, feature_extractor):
-    img = image.load_img(image_path, target_size=(299, 299))
-    img_array = image.img_to_array(img)
-    img_array = np.expand_dims(img_array, axis=0)
-    img_array = img_array / 255.0
-    features = feature_extractor.predict(img_array)
-    return features.flatten()
+def extract_features(image_path):
+    with open(image_path, "rb") as image_file:
+        image_data = base64.b64encode(image_file.read()).decode("utf-8")
+
+    headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
+    response = requests.post(HF_API_URL, json={"image": image_data}, headers=headers)
+
+    if response.status_code == 200:
+        return np.array(response.json())  # Expecting an array from the API
+    else:
+        raise ValueError(f"HF API Error: {response.text}")
 
 def find_similar_images(query_features, top_n=5):
     # Query Pinecone for similar images
