@@ -11,11 +11,11 @@ import pinecone
 from decouple import config
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["https://vision-search-five.vercel.app/"])
 
 # Pinecone API key and environment
 PINECONE_API_KEY =config("PINECONE_API_KEY") 
-PINECONE_ENVIRONMENT =config("YOUR_PINECONE_ENVIRONMENT") 
+PINECONE_ENVIRONMENT =config("PINECONE_ENVIRONMENT") 
 PINECONE_INDEX_NAME = "car-images"  
 
 # Define paths

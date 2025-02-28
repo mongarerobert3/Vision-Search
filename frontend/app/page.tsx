@@ -1,64 +1,60 @@
 "use client";
 
-import React, { useState } from 'react';
-import axios from 'axios';
+import React, { useState } from "react";
+import axios from "axios";
+
+interface SimilarImage {
+  url: string;
+  name: string;
+}
 
 const VisionSearch = () => {
-    const [queryImage, setQueryImage] = useState<File | null>(null);
-    interface SimilarImage {
-        url: string;
-        name: string;
+  const [queryImage, setQueryImage] = useState<File | null>(null);
+  const [similarImages, setSimilarImages] = useState<SimilarImage[]>([]);
+  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL ;
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setQueryImage(e.target.files[0]);
     }
-    
-    const [similarImages, setSimilarImages] = useState<SimilarImage[]>([]);
+  };
 
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
-            setQueryImage(e.target.files[0]);
-        }
-    };
+  const handleSubmit = async () => {
+    if (!queryImage) {
+      console.error("No image selected");
+      return;
+    }
 
-    const handleSubmit = async () => {
-        if (!queryImage) return;
-    
-        // Send the query image to the Render API
-        const formData = new FormData();
-        formData.append('image', queryImage);
-    
-        try {
-            const response = await axios.post('https://your-render-app.onrender.com/vision-search',
-                formData,
-                {
-                    headers: { 'Content-Type': 'multipart/form-data' },
-                }
-            );
-    
-            // Update the state with similar images
-            setSimilarImages(response.data.similarImages);
-        } catch (error) {
-            console.error('Error during vision search:', error);
-        }
-    };
+    const formData = new FormData();
+    formData.append("image", queryImage);
 
-    return (
-        <div>
-            <h1>Vision Search</h1>
-            <input type="file" onChange={handleImageUpload} />
-            <button onClick={handleSubmit}>Search</button>
+    try {
+      const response = await axios.post(`${BACKEND_URL}/vision-search`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
-            {similarImages.map((img, index) => (
-                <li key={index}>
-                    {/* Prepend the backend URL to the image path */}
-                    <img
-                        src={`https://33c5-35-240-223-21.ngrok-free.app${img.url}`}
-                        alt={`Similar ${index + 1}`}
-                        width="200"
-                    />
-                    <p>{img.name}</p>
-                </li>
-            ))}
-        </div>
-    );
+      setSimilarImages(response.data.similarImages || []);
+    } catch (error) {
+      console.error("Error during vision search:", error);
+    }
+  };
+
+  return (
+    <div>
+      <h1>Vision Search</h1>
+      <input type="file" accept="image/*" onChange={handleImageUpload} />
+      <button onClick={handleSubmit}>Search</button>
+
+      <ul>
+        {similarImages.map((img, index) => (
+          <li key={index}>
+            <img src={`${BACKEND_URL}${img.url}`} alt={img.name} width="200" />
+            <p>{img.name}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 };
 
 export default VisionSearch;

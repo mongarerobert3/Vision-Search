@@ -4,6 +4,6 @@ werkzeug
 tensorflow
 huggingface_hub
 numpy
-pinecone-client
+pinecone
 python-decouple
 gunicorn
