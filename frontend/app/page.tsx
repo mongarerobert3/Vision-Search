@@ -11,7 +11,7 @@ interface SimilarImage {
 const VisionSearch = () => {
   const [queryImage, setQueryImage] = useState<File | null>(null);
   const [similarImages, setSimilarImages] = useState<SimilarImage[]>([]);
-  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL ;
+  const BACKEND_URL = "https://vision-search.onrender.com";
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
