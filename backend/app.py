@@ -2,119 +2,124 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import uuid
-from werkzeug.utils import secure_filename
+import tempfile
+import numpy as np
+import requests
 import tensorflow as tf
 from huggingface_hub import hf_hub_download
-from tensorflow.keras.preprocessing import image
-import numpy as np
-import base64
-import requests
-from pinecone import Pinecone, ServerlessSpec
+from werkzeug.utils import secure_filename
 from decouple import config
-
-import tempfile
+from pinecone import Pinecone, ServerlessSpec
 from PIL import Image
+import io
+import base64
 
 app = Flask(__name__)
-CORS(app, origins=["https://vision-search-five.vercel.app"])
+CORS(app, resources={r"/*": {"origins": "https://vision-search-five.vercel.app"}})
 
-# Pinecone API key and environment
-PINECONE_API_KEY =config("PINECONE_API_KEY") 
-PINECONE_ENVIRONMENT =config("PINECONE_ENVIRONMENT") 
-PINECONE_INDEX_NAME = "car-images"  
-
+# Load API keys
+PINECONE_API_KEY = config("PINECONE_API_KEY")
+PINECONE_ENVIRONMENT = config("PINECONE_ENVIRONMENT")
+PINECONE_INDEX_NAME = "car-images"
 HF_API_URL = "https://api-inference.huggingface.co/models/courte/Car_Vision"
 HF_API_TOKEN = config("HF_API_TOKEN")
-
-
-# Space API endpoint
 SPACE_API_URL = "https://courte-car-vision.hf.space/api/predict"
 
-# Define paths
-DATASET_PATH = "./Car_Sales_vision_ai_project"
-MODEL_REPO_ID = "courte/Car_Vision" 
-MODEL_FILENAME = "car_brand_classifier_final.h5"
+# Hugging Face model details
+MODEL_REPO_ID = "courte/Car_Vision"
+MODEL_FILENAME = "car_brand_classifier_final_savedmodel/car_brand_classifier_final.h5"
 
-# Load the model and feature extractor from Hugging Face
-model_name = "courte/Car_Vision"
-model_filename = "car_brand_classifier_final_savedmodel/car_brand_classifier_final.h5"
-
-# Load the model directly from Hugging Face
-model_path = hf_hub_download(repo_id=model_name, filename=model_filename)
+# Download and load model
+model_path = hf_hub_download(repo_id=MODEL_REPO_ID, filename=MODEL_FILENAME)
 model = tf.keras.models.load_model(model_path)
-#feature_extractor = tf.keras.Model(inputs=model.input, outputs=model.layers[-3].output)
 
 # Initialize Pinecone client
 pc = Pinecone(api_key=PINECONE_API_KEY)
-
 if PINECONE_INDEX_NAME not in pc.list_indexes().names():
     pc.create_index(
         name=PINECONE_INDEX_NAME,
-        dimension=256,  # Ensure this matches your model's embedding size
-        metric="cosine",  # Similarity search metric
-        spec=ServerlessSpec(cloud="aws", region="us-east-1")  # Modify region if needed
+        dimension=256,  # Match model's embedding size
+        metric="cosine",
+        spec=ServerlessSpec(cloud="aws", region="us-east-1")
     )
-
-# Get index
 index = pc.Index(PINECONE_INDEX_NAME)
 
-def find_similar_images(query_features, top_n=5):
-    # Query Pinecone for similar images
-    results = index.query(
-        vector=query_features,
-        top_k=top_n,
-        include_metadata=False  # No need for metadata in this case
-    )
-    return [(match['id'], match['score']) for match in results['matches']]
+def preprocess_image(image_obj):
+    """
+    Preprocess image: Convert to RGB, resize, normalize, and add batch dimension.
+    """
+    if isinstance(image_obj, str):  # If filepath is provided
+        image_obj = Image.open(image_obj)
+
+    image_obj = image_obj.convert("RGB")  # Ensure RGB format
+    image_obj = image_obj.resize((299, 299))  # Match model input size
+    image_arr = np.array(image_obj) / 255.0  # Normalize
+    return np.expand_dims(image_arr, axis=0)
+
+def image_to_base64(image_obj):
+    """
+    Convert a PIL Image to a base64-encoded string.
+    """
+    buffered = io.BytesIO()
+    image_obj.save(buffered, format="JPEG")
+    return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 @app.route('/images/<path:filename>')
 def serve_image(filename):
-    image_path = os.path.join(DATASET_PATH, filename)
-    return send_from_directory(os.path.dirname(image_path), os.path.basename(image_path))
+    """
+    Serve images from the dataset directory.
+    """
+    return send_from_directory(os.path.dirname(filename), os.path.basename(filename))
 
 @app.route('/vision-search', methods=['POST'])
 def vision_search():
+    """
+    Process an uploaded image, preprocess it locally, and send it to the Spaces API for feature extraction.
+    """
     if 'image' not in request.files:
         return jsonify({'error': 'No image provided'}), 400
 
-    query_image = request.files['image']
-    if query_image.filename == '':
+    uploaded_image = request.files['image']
+    if uploaded_image.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
     try:
-        # Validate the image using Pillow
-        img = Image.open(query_image)
-        img.verify()  # Verify that it is an image
-    except Exception:
-        return jsonify({'error': 'Invalid file type'}), 400
+        # Open the uploaded image
+        img = Image.open(uploaded_image).convert("RGB")
 
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
-            query_image.save(temp_file.name)
-            temp_image_path = temp_file.name
+        # Preprocess the image locally
+        preprocessed_image = preprocess_image(img)
 
-        # Forward the image to the Space API
-        response = requests.post(SPACE_API_URL, files={"file": open(temp_image_path, "rb")})
-        if response.status_code == 200:
-            features = np.array(response.json())
-        else:
+        # Convert the preprocessed image to a base64-encoded string
+        preprocessed_image_pil = Image.fromarray((preprocessed_image[0] * 255).astype(np.uint8))
+        image_base64 = image_to_base64(preprocessed_image_pil)
+
+        # Send the preprocessed image to the Spaces API
+        response = requests.post(SPACE_API_URL, json={"image": image_base64})
+
+        if response.status_code != 200:
             raise ValueError(f"Space API Error: {response.text}")
 
+        # Extract features from the API response
+        features = np.array(response.json())  # Ensure this matches the expected format
+
         # Query Pinecone for similar images
-        results = index.query(
-            vector=features,
-            top_k=5,
-            include_metadata=True
-        )
-        return jsonify(results)
+        results = find_similar_images(features, top_n=5)
+
+        # Prepare the response
+        similar_images = [
+            {
+                'id': match['id'],
+                'score': float(match['score']),
+                'url': f"/images/{match['id']}"  # Serve images from the dataset directory
+            }
+            for match in results
+        ]
+        return jsonify({'similarImages': similar_images})
 
     except Exception as e:
         print(f"Error during vision search: {e}")
         return jsonify({'error': str(e)}), 500
-
-    finally:
-        if os.path.exists(temp_image_path):
-            os.remove(temp_image_path)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')
