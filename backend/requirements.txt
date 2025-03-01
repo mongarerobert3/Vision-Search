@@ -8,3 +8,4 @@ pinecone
 python-decouple
 gunicorn
 Pillow
+roboflow
