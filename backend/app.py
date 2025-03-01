@@ -6,6 +6,7 @@ import tempfile
 import numpy as np
 import requests
 import tensorflow as tf
+from tensorflow.keras.preprocessing import image
 from huggingface_hub import hf_hub_download
 from werkzeug.utils import secure_filename
 from decouple import config
@@ -18,6 +19,8 @@ from roboflow import Roboflow
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "https://vision-search-five.vercel.app"}})
+
+#CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Load API keys
 PINECONE_API_KEY = config("PINECONE_API_KEY")
@@ -69,15 +72,48 @@ def image_to_base64(image_obj):
 
 # Initialize Roboflow API client
 rf = Roboflow(api_key="ROBOFLOW_API_KEY")
-roboflow_model = rf.workspace("starter-ccy4i").project("car-brand-detection").version(1).model
+roboflow_model = rf.workspace("starter-ccy4i").project("car-brand-detection-eak9j").version(1).model
 
-def run_roboflow_inference(image_path):
-    # Run inference on the image using Roboflow
-    img = image.load_img(image_path, target_size=(224, 224))  # Adjust if necessary
+MODEL_ENDPOINT = 'https://detect.roboflow.com/car-brand-detection-eak9j/1'
+
+# Verify if model is loaded correctly
+try:
+    workspace = rf.workspace("starter-ccy4i")
+    print("Workspace loaded successfully")
+    project = workspace.project("car-brand-detection-eak9j")
+    print("Project loaded successfully")
+    versions = project.versions()
+    for version in versions:
+        print(f"Version ID: {version.id}, Version Name: {version.name}")
+    
+    if roboflow_model is None:
+        print("Error: Model failed to load")
+    else:
+        print("Roboflow model loaded successfully")
+except Exception as e:
+    print(f"Error during model initialization: {str(e)}")
+
+def run_roboflow_inference(image_obj):
+    """
+    Run inference on the image using Roboflow
+    """
+    # Ensure the model is loaded properly
+    if roboflow_model is None:
+        raise ValueError("Roboflow model is not initialized correctly")
+
+    # Save the PIL Image to a temporary file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+        image_obj.save(temp_file.name)
+        temp_image_path = temp_file.name
+
+    # Load the image using Keras' image module
+    img = image.load_img(temp_image_path, target_size=(224, 224))  # Adjust if necessary
     img_array = image.img_to_array(img) / 255.0  # Normalize the image
     img_array = np.expand_dims(img_array, axis=0)
 
+    # Run the inference with Roboflow model
     predictions = roboflow_model.predict(img_array).json()
+
     return predictions
 
 
@@ -144,94 +180,29 @@ def vision_search_hf():
 
 @app.route('/vision-search-roboflow', methods=['POST'])
 def vision_search_roboflow():
-    """
-    Process an uploaded image, run inference using Roboflow, and find similar images using Pinecone.
-    """
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image provided'}), 400
-
-    uploaded_image = request.files['image']
-    if uploaded_image.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-
     try:
-        # Save the uploaded image to a temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
-            uploaded_image.save(temp_file.name)
-            temp_image_path = temp_file.name
+        # Get the image from the request
+        image = request.files.get('image')
 
-        # Open the image and run inference
-        img = Image.open(temp_image_path).convert("RGB")
-        roboflow_predictions = run_roboflow_inference(img)
+        if not image:
+            return jsonify({"error": "No image provided"}), 400
 
-        # Extract features for each detected object and find similar images
-        similar_images = []
-        for prediction in roboflow_predictions.get('predictions', []):
-            # Crop the detected object using its bounding box
-            x, y, width, height = (
-                prediction['x'], prediction['y'], prediction['width'], prediction['height']
-            )
-            left = int(x - width / 2)
-            top = int(y - height / 2)
-            right = int(x + width / 2)
-            bottom = int(y + height / 2)
-            cropped_img = img.crop((left, top, right, bottom))
+        # Send the image to the Roboflow API for prediction
+        files = {'file': image.read()}
+        headers = {'Authorization': f'Bearer {API_KEY}'}
 
-            # Preprocess the cropped image
-            preprocessed_image = preprocess_image(cropped_img)
+        # Send the request to Roboflow Instant model
+        response = requests.post(MODEL_ENDPOINT, headers=headers, files=files)
 
-            # Convert the preprocessed image to a base64-encoded string
-            preprocessed_image_pil = Image.fromarray((preprocessed_image[0] * 255).astype(np.uint8))
-            image_base64 = image_to_base64(preprocessed_image_pil)
+        # Log the response status and details for troubleshooting
+        if response.status_code != 200:
+            return jsonify({"error": "Error from Roboflow API", "details": response.json()}), 500
 
-            # Send the preprocessed image to the Spaces API for feature extraction
-            response = requests.post(
-                SPACE_API_URL,
-                json={"data": [f"data:image/jpeg;base64,{image_base64}"]}
-            )
-
-            if response.status_code != 200:
-                raise ValueError(f"Space API Error: {response.status_code}, {response.text}")
-
-            # Extract features from the API response
-            features = np.array(response.json()["data"][0])  # Adjust based on the API response format
-
-            # Query Pinecone for similar images
-            results = find_similar_images(features, top_n=5)
-
-            # Prepare the similar images for this detection
-            similar_images_for_detection = [
-                {
-                    'id': match['id'],
-                    'score': float(match['score']),
-                    'url': f"/images/{match['id']}"  # Serve images from the dataset directory
-                }
-                for match in results
-            ]
-
-            # Add the similar images to the overall result
-            similar_images.append({
-                'detection': prediction,
-                'similarImages': similar_images_for_detection
-            })
-
-        # Return the combined results
-        result = {
-            'model': 'Roboflow',
-            'predictions': roboflow_predictions.get('predictions', []),
-            'similarImages': similar_images
-        }
-
+        result = response.json()
         return jsonify(result)
 
     except Exception as e:
-        print(f"Error during vision search: {e}")
-        return jsonify({'error': str(e)}), 500
-
-    finally:
-        # Clean up the temporary file
-        if os.path.exists(temp_image_path):
-            os.remove(temp_image_path)
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')

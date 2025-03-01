@@ -14,7 +14,7 @@ const VisionSearch = () => {
   const [useRoboflow, setUseRoboflow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const BACKEND_URL = "https://vision-search.onrender.com";
+  const BACKEND_URL = "http://127.0.0.1:5000";
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
