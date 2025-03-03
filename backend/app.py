@@ -7,6 +7,9 @@ import cv2
 from PIL import Image
 import io
 import base64
+from flask_cors import CORS
+
+CORS(app, resources={r"/*": {"origins": "https://vision-search-five.vercel.app"}})
 
 # Initialize FastAPI app
 app = FastAPI()
