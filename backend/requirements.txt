@@ -9,3 +9,9 @@ python-decouple
 gunicorn
 Pillow
 roboflow
+fastapi
+uvicorn
+torch
+ultralytics
+numpy
+opencv-python-headless
