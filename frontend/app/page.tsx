@@ -79,7 +79,7 @@ const VisionSearch = () => {
         <div style={styles.rightPanel}>
           <h2 style={styles.subHeading}>Similar Images</h2>
           {loading ? (
-            <p style={styles.loadingMessage}>Loading...</p>
+            <p style={styles.loadingMessage as React.CSSProperties}>Loading...</p>
           ) : similarImages.length > 0 ? (
             <ul style={styles.imageList}>
               {similarImages.map((img, index) => (
@@ -90,7 +90,7 @@ const VisionSearch = () => {
               ))}
             </ul>
           ) : (
-            <p style={styles.noResults}>No similar images found.</p>
+            <p style={styles.noResults as React.CSSProperties}>No similar images found.</p>
           )}
         </div>
       </div>
@@ -98,7 +98,7 @@ const VisionSearch = () => {
   );
 };
 
-const styles = {
+const styles: { [key: string]: React.CSSProperties } = {
   container: { fontFamily: "Arial, sans-serif", padding: "20px", maxWidth: "1200px", margin: "0 auto" },
   heading: { textAlign: "center", fontSize: "2rem", marginBottom: "20px" },
   mainLayout: { display: "flex", gap: "40px", alignItems: "flex-start" },
@@ -112,7 +112,7 @@ const styles = {
   errorMessage: { color: "red", marginTop: "10px", fontSize: "1rem" },
   rightPanel: { width: "45%", border: "1px solid #ccc", borderRadius: "8px", padding: "20px", boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)" },
   imageList: { listStyle: "none", padding: 0, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: "15px" },
-  imageItem: { textAlign: "center" },
+  imageItem: { textAlign: "center" } as React.CSSProperties,
   image: { width: "100%", height: "150px", objectFit: "cover", borderRadius: "4px", marginBottom: "5px" },
   imageName: { fontSize: "0.9rem", color: "#555" },
   loadingMessage: { textAlign: "center", fontSize: "1rem", color: "#555" },
