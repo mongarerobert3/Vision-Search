@@ -1,31 +1,23 @@
-from gradio_client import Client
-from PIL import Image
-import base64
+import roboflow
 
-def image_to_base64(image_path):
-    """
-    Convert an image file to a base64-encoded string.
-    """
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode("utf-8")
+# Initialize Roboflow
+rf = roboflow.Roboflow(api_key="j80P1KwbPUw0s7jWoGkQ")
+print("Roboflow initialized successfully")
 
-# Path to the image file
-image_path = "subaru1.jpg"
+# Load the project
+project = rf.workspace().project("car-brand-detection-eak9j")
+print("Project loaded successfully")
 
-# Convert the image to a base64-encoded string
-image_base64 = image_to_base64(image_path)
+model = project.version("1").model
 
-# Create a Gradio Client to call the Hugging Face Space
-client = Client("courte/Car_Vision")
 
-# Make the API call using the base64 image string
-result = client.predict(
-    {
-        "data": [
-            f"data:image/jpeg;base64,{image_base64}"
-        ]
-    },
-    api_name="/predict" 
-)
+# Load the model
+roboflow_model = project.version("1").model
+print("Roboflow model loaded successfully")
 
-print(result)
+# Run inference on a local image
+prediction = model.predict("./subaru.jpg")
+
+# Convert predictions to JSON
+prediction_json = prediction.json()
+print("Predictions:", prediction_json)
