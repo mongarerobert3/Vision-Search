@@ -1,3 +1,14 @@
+Flask
+flask-cors
+werkzeug
+tensorflow
+huggingface_hub
+numpy
+pinecone
+python-decouple
+gunicorn
+Pillow
+roboflow
 fastapi
 uvicorn
 torch
@@ -5,4 +16,3 @@ ultralytics
 numpy
 opencv-python-headless
 python-multipart
-Pillow
