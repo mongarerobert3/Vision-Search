@@ -7,12 +7,19 @@ import cv2
 from PIL import Image
 import io
 import base64
-from flask_cors import CORS
-
-CORS(app, resources={r"/*": {"origins": "https://vision-search-five.vercel.app"}})
+from fastapi.middleware.cors import CORSMiddleware  # Import CORS middleware
 
 # Initialize FastAPI app
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://vision-search-five.vercel.app"],  # Specify allowed origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 # Load pretrained YOLO model
 model = YOLO("ultralytics/yolov8n")  # YOLOv8 Nano from Hugging Face
@@ -21,7 +28,7 @@ def predict(image_bytes):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     results = model(image)  # Run inference
     output_img = results[0].plot()  # Draw bounding boxes
-    
+
     # Convert image to base64 to send as JSON response
     _, buffer = cv2.imencode(".jpg", output_img)
     base64_img = base64.b64encode(buffer).decode("utf-8")
