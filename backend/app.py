@@ -9,13 +9,11 @@ import io
 import base64
 from flask_cors import CORS
 
-import logging
-logging.basicConfig(level=logging.INFO)
-
-# Initialize FastAPI app
 app = FastAPI()
+
 CORS(app, resources={r"/*": {"origins": "https://vision-search-five.vercel.app"}})
 
+# Initialize FastAPI app
 # Load pretrained YOLO model
 model = YOLO("ultralytics/yolov8n")  # YOLOv8 Nano from Hugging Face
 
@@ -29,18 +27,8 @@ def predict(image_bytes):
     base64_img = base64.b64encode(buffer).decode("utf-8")
     return base64_img
 
-'''@app.post("/vision-search-hf")
+@app.post("/vision-search-hf")
 async def detect_car(file: UploadFile = File(...)):
     image_bytes = await file.read()
     result_image = predict(image_bytes)
     return JSONResponse(content={"image": result_image})
-'''
-
-@app.post("/vision-search-hf")
-async def detect_car(file: UploadFile = File(...)):
-    logging.info(f"Received file: {file.filename}, content type: {file.content_type}")
-    try:
-        contents = await file.read()
-        return {"filename": file.filename, "size": len(contents)}
-    except Exception as e:
-        return {"error": str(e)}
